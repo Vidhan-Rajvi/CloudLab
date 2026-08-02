@@ -1,26 +1,50 @@
+<<<<<<< HEAD
 from typing import List
 from fastapi import FastAPI, HTTPException, status
 from sqlalchemy import text
 from config.session import SessionLocal, engine, Base
 from .models import User
 from .schemas import UserCreate, UserResponse
+=======
+from fastapi import FastAPI
+from sqlalchemy import text
+from config.session import SessionLocal, engine, Base
+from app.routers import users
+>>>>>>> 14b5503 (Phase 5.6: Refactor backend into professional layered architecture)
 
 # Auto-create database tables
 Base.metadata.create_all(bind=engine)
 
+<<<<<<< HEAD
 app = FastAPI()
 
+=======
+app = FastAPI(
+    title="CloudLab API",
+    description="Backend API for CloudLab Platform",
+    version="1.0.0"
+)
+
+# Include Routers
+app.include_router(users.router)
+>>>>>>> 14b5503 (Phase 5.6: Refactor backend into professional layered architecture)
 
 @app.get("/")
 def home():
     return {"message": "🚀 Welcome to CloudLab API"}
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> 14b5503 (Phase 5.6: Refactor backend into professional layered architecture)
 @app.get("/health")
 def health():
     return {"status": "healthy"}
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> 14b5503 (Phase 5.6: Refactor backend into professional layered architecture)
 @app.get("/db")
 def test_database():
     db = SessionLocal()
@@ -31,6 +55,7 @@ def test_database():
         return {"database": "Connection Failed ❌", "error": str(e)}
     finally:
         db.close()
+<<<<<<< HEAD
 
 
 @app.post("/users", status_code=status.HTTP_201_CREATED)
@@ -83,3 +108,5 @@ def get_user_by_id(user_id: int):
         return user
     finally:
         db.close()
+=======
+>>>>>>> 14b5503 (Phase 5.6: Refactor backend into professional layered architecture)
