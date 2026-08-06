@@ -1,20 +1,18 @@
-import os
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
+import os
 
-# Uses your environment variables from .env
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "postgresql+psycopg://cloudlab:cloudlab123@postgres:5432/cloudlab_db"
-)
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://cloudlab:cloudlab@cloudlab-postgres:5432/cloudlab_db")
 
 engine = create_engine(DATABASE_URL)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-SessionLocal = sessionmaker(
-    autocommit=False,
-    autoflush=False,
-    bind=engine
-)
-
-# Base class for SQLAlchemy models
 Base = declarative_base()
+
+# FastAPI Dependency for Database Session
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
