@@ -3,6 +3,7 @@ from sqlalchemy import text
 from config.session import SessionLocal, engine, Base
 from app import models
 from app.routers import users, auth
+from config.redis import redis_client
 
 # Auto-create database tables
 Base.metadata.create_all(bind=engine)
@@ -35,3 +36,20 @@ def test_database():
         return {"database": "Connection Failed ❌", "error": str(e)}
     finally:
         db.close()
+
+@app.get("/redis")
+def test_redis():
+    try:
+        redis_client.set("cloudlab", "Redis Connected Successfully 🚀")
+        value = redis_client.get("cloudlab")
+
+        return {
+            "status": "Connected",
+            "value": value
+        }
+
+    except Exception as e:
+        return {
+            "status": "Failed",
+            "error": str(e)
+        }
