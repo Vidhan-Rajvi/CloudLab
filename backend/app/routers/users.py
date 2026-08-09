@@ -1,80 +1,41 @@
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.orm import Session
 from typing import List
-from fastapi import APIRouter, HTTPException, status
-from config.session import SessionLocal
+
+from config.session import get_db
 from app.schemas import UserCreate, UserResponse
-from app.services import user_service
-from app.utils.cache import (
-    get_users_cache,
-    set_users_cache,
-    clear_users_cache
-)
+from app.services.user_service import create_user_record, get_all_users, get_user_by_id
+from app.security.deps import get_current_user
 
 router = APIRouter(
     prefix="/users",
     tags=["Users"]
 )
 
-@router.post("", status_code=status.HTTP_201_CREATED)
-def create_user(user: UserCreate):
-    db = SessionLocal()
-    try:
-        existing_user = user_service.get_user_by_email(db, user.email)
-        if existing_user:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="Email already exists."
-            )
 
-        new_user = user_service.create_user_record(db, user)
+@router.post("", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+def register_user(user: UserCreate, db: Session = Depends(get_db)):
+    return create_user_record(db=db, user=user)
 
-        # Invalidate users cache because database changed
-        clear_users_cache()
-
-        return {
-            "message": "User Created Successfully ✅",
-            "id": new_user.id,
-            "name": new_user.name,
-            "email": new_user.email,
-        }
-    finally:
-        db.close()
 
 @router.get("", response_model=List[UserResponse])
-def get_users():
-    # Try Redis first
-    cached_users = get_users_cache()
-    if cached_users is not None:
-        return cached_users
+def read_users(
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    return get_all_users(db=db)
 
-    # Cache miss -> query PostgreSQL
-    db = SessionLocal()
-    try:
-        users = user_service.get_all_users(db)
-        users_data = [
-            {
-                "id": user.id,
-                "name": user.name,
-                "email": user.email
-            }
-            for user in users
-        ]
-
-        # Store result in Redis
-        set_users_cache(users_data)
-        return users_data
-    finally:
-        db.close()
 
 @router.get("/{user_id}", response_model=UserResponse)
-def get_user_by_id(user_id: int):
-    db = SessionLocal()
-    try:
-        user = user_service.get_user_by_id(db, user_id)
-        if not user:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"User with ID {user_id} not found."
-            )
-        return user
-    finally:
-        db.close()
+def read_user(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    db_user = get_user_by_id(db=db, user_id=user_id)
+    if db_user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+    return db_user
