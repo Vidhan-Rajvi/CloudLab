@@ -1,20 +1,18 @@
+version: "3.8"
+
 services:
   postgres:
     image: postgres:16
     container_name: cloudlab-postgres
     restart: unless-stopped
-
     env_file:
       - .env
-
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-
     ports:
       - "5432:5432"
-
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
@@ -22,28 +20,38 @@ services:
     image: redis:7-alpine
     container_name: cloudlab-redis
     restart: unless-stopped
-
     ports:
       - "6379:6379"
+    volumes:
+      - redis_data:/data
 
   backend:
     build: ./backend
     container_name: cloudlab-backend
-
+    restart: unless-stopped
     depends_on:
       - postgres
       - redis
-
     env_file:
       - .env
-
     ports:
       - "8000:8000"
-
     volumes:
       - ./backend:/app
 
+  worker:
+    build: ./backend
+    container_name: cloudlab-worker
     restart: unless-stopped
+    command: python -m app.jobs.worker
+    depends_on:
+      - postgres
+      - redis
+    env_file:
+      - .env
+    volumes:
+      - ./backend:/app
 
 volumes:
   postgres_data:
+  redis_data:
