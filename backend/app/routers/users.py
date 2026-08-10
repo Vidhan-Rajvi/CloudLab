@@ -6,6 +6,7 @@ from config.session import get_db
 from app.schemas import UserCreate, UserResponse
 from app.services.user_service import create_user_record, get_all_users, get_user_by_id
 from app.security.deps import get_current_user
+from app.security.rate_limiter import check_rate_limit
 
 router = APIRouter(
     prefix="/users",
@@ -18,7 +19,11 @@ def register_user(user: UserCreate, db: Session = Depends(get_db)):
     return create_user_record(db=db, user=user)
 
 
-@router.get("", response_model=List[UserResponse])
+@router.get(
+    "",
+    response_model=List[UserResponse],
+    dependencies=[Depends(check_rate_limit)]
+)
 def read_users(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user)
