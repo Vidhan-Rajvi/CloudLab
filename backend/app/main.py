@@ -8,6 +8,7 @@ from app.routers import users, auth, jobs
 from config.redis import redis_client
 from app.utils.logger import get_logger
 from app.middleware.request_logging import RequestLoggingMiddleware
+from app.exceptions.handlers import register_exception_handlers
 
 logger = get_logger("cloudlab.api")
 
@@ -40,6 +41,9 @@ app.add_middleware(
 
 # Configure HTTP Request/Response Logging Middleware
 app.add_middleware(RequestLoggingMiddleware)
+
+# Register Global Exception Handlers
+register_exception_handlers(app)
 
 # Register Routers
 app.include_router(auth.router)
