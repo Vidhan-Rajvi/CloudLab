@@ -2,16 +2,18 @@ import json
 import logging
 import sys
 from datetime import datetime, timezone
+from app.utils.request_context import get_request_id
 
 
 class JSONFormatter(logging.Formatter):
-    """Formats log records as single-line JSON objects for container stdout/stderr."""
+    """Formats log records as single-line JSON objects."""
 
     STANDARD_ATTRS = {
-        "name", "msg", "args", "levelname", "levelno", "pathname", "filename",
-        "module", "exc_info", "exc_text", "stack_info", "lineno", "funcName",
-        "created", "msecs", "relativeCreated", "thread", "threadName",
-        "processName", "process", "message", "taskName"
+        "name", "msg", "args", "levelname", "levelno", "pathname",
+        "filename", "module", "exc_info", "exc_text", "stack_info",
+        "lineno", "funcName", "created", "msecs", "relativeCreated",
+        "thread", "threadName", "processName", "process", "message",
+        "taskName"
     }
 
     def format(self, record: logging.LogRecord) -> str:
@@ -21,6 +23,11 @@ class JSONFormatter(logging.Formatter):
             "logger": record.name,
             "message": record.getMessage(),
         }
+
+        # Automatically include the current request ID when present.
+        request_id = get_request_id()
+        if request_id:
+            log_record["request_id"] = request_id
 
         # Include any extra structured context passed via `extra={...}`
         for key, value in record.__dict__.items():

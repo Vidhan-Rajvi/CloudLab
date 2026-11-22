@@ -3,6 +3,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.utils.logger import get_logger
+from app.utils.request_context import get_request_id
 
 logger = get_logger("cloudlab.api")
 
@@ -17,6 +18,20 @@ HTTP_ERROR_CODES = {
     429: "TOO_MANY_REQUESTS",
     500: "INTERNAL_SERVER_ERROR",
 }
+
+
+def get_request_id_from_request(request: Request) -> str | None:
+    """Gets the request ID from request state or the current context."""
+    return getattr(request.state, "request_id", None) or get_request_id()
+
+
+def get_request_id_headers(request: Request, extra_headers: dict | None = None) -> dict:
+    """Merges existing exception headers with X-Request-ID when available."""
+    headers = dict(extra_headers) if extra_headers else {}
+    request_id = get_request_id_from_request(request)
+    if request_id:
+        headers["X-Request-ID"] = request_id
+    return headers
 
 
 async def http_exception_handler(request: Request, exc: StarletteHTTPException) -> JSONResponse:
@@ -42,7 +57,7 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException) 
                 "message": message,
             }
         },
-        headers=getattr(exc, "headers", None),
+        headers=get_request_id_headers(request, getattr(exc, "headers", None)),
     )
 
 
@@ -79,6 +94,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
                 "details": sanitized_details,
             }
         },
+        headers=get_request_id_headers(request),
     )
 
 
@@ -104,6 +120,7 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
                 "message": "An unexpected error occurred. Please try again later.",
             }
         },
+        headers=get_request_id_headers(request),
     )
 
 
