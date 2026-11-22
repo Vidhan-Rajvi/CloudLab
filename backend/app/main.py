@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
@@ -5,14 +6,26 @@ from config.session import SessionLocal, engine, Base
 from app import models
 from app.routers import users, auth, jobs
 from config.redis import redis_client
+from app.utils.logger import get_logger
+
+logger = get_logger("cloudlab.api")
 
 # Auto-create database tables
 Base.metadata.create_all(bind=engine)
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    logger.info("CloudLab API started", extra={"event": "startup"})
+    yield
+    logger.info("CloudLab API shutting down", extra={"event": "shutdown"})
+
+
 app = FastAPI(
     title="CloudLab API",
     description="Backend API for CloudLab infrastructure learning platform",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan
 )
 
 # Configure CORS Middleware
@@ -48,8 +61,10 @@ def test_database():
     db = SessionLocal()
     try:
         db.execute(text("SELECT 1"))
+        logger.info("Database connectivity verified", extra={"component": "postgres"})
         return {"database": "Connected Successfully ✅"}
     except Exception as e:
+        logger.error("Database connection failed", extra={"component": "postgres", "error": str(e)})
         return {"database": "Connection Failed ❌", "error": str(e)}
     finally:
         db.close()
@@ -60,13 +75,13 @@ def test_redis():
     try:
         redis_client.set("cloudlab", "Redis Connected Successfully 🚀")
         value = redis_client.get("cloudlab")
-
+        logger.info("Redis connectivity verified", extra={"component": "redis"})
         return {
             "status": "Connected",
             "value": value
         }
-
     except Exception as e:
+        logger.error("Redis connection failed", extra={"component": "redis", "error": str(e)})
         return {
             "status": "Failed",
             "error": str(e)
