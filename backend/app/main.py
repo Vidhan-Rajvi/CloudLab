@@ -7,6 +7,7 @@ from app import models
 from app.routers import users, auth, jobs
 from config.redis import redis_client
 from app.utils.logger import get_logger
+from app.middleware.request_logging import RequestLoggingMiddleware
 
 logger = get_logger("cloudlab.api")
 
@@ -36,6 +37,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Configure HTTP Request/Response Logging Middleware
+app.add_middleware(RequestLoggingMiddleware)
 
 # Register Routers
 app.include_router(auth.router)
