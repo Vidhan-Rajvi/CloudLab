@@ -1,6 +1,7 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from prometheus_fastapi_instrumentator import Instrumentator
 from sqlalchemy import text
 from config.session import SessionLocal, engine, Base
 from app import models
@@ -51,6 +52,20 @@ app.include_router(auth.router)
 app.include_router(users.router)
 app.include_router(jobs.router)
 app.include_router(health.router)
+
+# Configure Prometheus Metrics Instrumentation
+instrumentator = Instrumentator(
+    should_group_status_codes=True,
+    should_ignore_untemplated=False,
+    should_group_untemplated=True,
+    excluded_handlers=["/metrics"],
+)
+instrumentator.instrument(app)
+instrumentator.expose(
+    app,
+    endpoint="/metrics",
+    include_in_schema=False,
+)
 
 
 @app.get("/")

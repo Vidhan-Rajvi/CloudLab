@@ -8,3 +8,4 @@ passlib[bcrypt]
 python-multipart
 
 redis
+prometheus-fastapi-instrumentator==8.1.0
