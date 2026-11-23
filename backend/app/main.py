@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 from config.session import SessionLocal, engine, Base
 from app import models
-from app.routers import users, auth, jobs
+from app.routers import users, auth, jobs, health
 from config.redis import redis_client
 from app.utils.logger import get_logger
 from app.middleware.request_logging import RequestLoggingMiddleware
@@ -50,6 +50,7 @@ register_exception_handlers(app)
 app.include_router(auth.router)
 app.include_router(users.router)
 app.include_router(jobs.router)
+app.include_router(health.router)
 
 
 @app.get("/")
