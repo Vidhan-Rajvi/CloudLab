@@ -1,18 +1,35 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from prometheus_fastapi_instrumentator import Instrumentator
 from sqlalchemy import text
 from config.session import SessionLocal, engine, Base
 from app import models
-from app.routers import users, auth, jobs
+from app.routers import users, auth, jobs, health
 from config.redis import redis_client
+from app.utils.logger import get_logger
+from app.utils.performance_metrics import register_performance_metrics
+from app.middleware.request_logging import RequestLoggingMiddleware
+from app.exceptions.handlers import register_exception_handlers
+
+logger = get_logger("cloudlab.api")
 
 # Auto-create database tables
 Base.metadata.create_all(bind=engine)
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    logger.info("CloudLab API started", extra={"event": "startup"})
+    yield
+    logger.info("CloudLab API shutting down", extra={"event": "shutdown"})
+
+
 app = FastAPI(
     title="CloudLab API",
     description="Backend API for CloudLab infrastructure learning platform",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan
 )
 
 # Configure CORS Middleware
@@ -22,12 +39,35 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["X-Request-ID"],
 )
+
+# Configure HTTP Request/Response Logging Middleware
+app.add_middleware(RequestLoggingMiddleware)
+
+# Register Global Exception Handlers
+register_exception_handlers(app)
 
 # Register Routers
 app.include_router(auth.router)
 app.include_router(users.router)
 app.include_router(jobs.router)
+app.include_router(health.router)
+
+# Configure Prometheus Metrics Instrumentation
+register_performance_metrics()
+instrumentator = Instrumentator(
+    should_group_status_codes=True,
+    should_ignore_untemplated=False,
+    should_group_untemplated=True,
+    excluded_handlers=["/metrics"],
+)
+instrumentator.instrument(app)
+instrumentator.expose(
+    app,
+    endpoint="/metrics",
+    include_in_schema=False,
+)
 
 
 @app.get("/")
@@ -48,8 +88,10 @@ def test_database():
     db = SessionLocal()
     try:
         db.execute(text("SELECT 1"))
+        logger.info("Database connectivity verified", extra={"component": "postgres"})
         return {"database": "Connected Successfully ✅"}
     except Exception as e:
+        logger.error("Database connection failed", extra={"component": "postgres", "error": str(e)})
         return {"database": "Connection Failed ❌", "error": str(e)}
     finally:
         db.close()
@@ -60,13 +102,13 @@ def test_redis():
     try:
         redis_client.set("cloudlab", "Redis Connected Successfully 🚀")
         value = redis_client.get("cloudlab")
-
+        logger.info("Redis connectivity verified", extra={"component": "redis"})
         return {
             "status": "Connected",
             "value": value
         }
-
     except Exception as e:
+        logger.error("Redis connection failed", extra={"component": "redis", "error": str(e)})
         return {
             "status": "Failed",
             "error": str(e)
