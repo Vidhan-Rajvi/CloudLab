@@ -202,14 +202,15 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "container_fs_usage_bytes{job=\"cloudlab-cadvisor\", device=~\"overlay|/dev/mapper/.*\"}",
-          "legendFormat": "{{name}}",
+          "expr": "container_fs_usage_bytes{job=\"cloudlab-cadvisor\", id=\"/\", device=\"overlay\"}",
+          "legendFormat": "{{device}}",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Container Filesystem Usage",
-      "type": "timeseries"
+      "title": "cAdvisor Root Cgroup Filesystem Usage",
+      "type": "timeseries",
+      "description": "Root-cgroup overlay filesystem usage reported by cAdvisor (id=\"/\", device=\"overlay\"). On Ubuntu cgroups v2 with overlay2, cAdvisor exposes host/root overlay storage usage rather than per-container filesystem usage."
     },
     {
       "datasource": {
