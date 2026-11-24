@@ -8,6 +8,7 @@ from app import models
 from app.routers import users, auth, jobs, health
 from config.redis import redis_client
 from app.utils.logger import get_logger
+from app.utils.performance_metrics import register_performance_metrics
 from app.middleware.request_logging import RequestLoggingMiddleware
 from app.exceptions.handlers import register_exception_handlers
 
@@ -54,6 +55,7 @@ app.include_router(jobs.router)
 app.include_router(health.router)
 
 # Configure Prometheus Metrics Instrumentation
+register_performance_metrics()
 instrumentator = Instrumentator(
     should_group_status_codes=True,
     should_ignore_untemplated=False,
