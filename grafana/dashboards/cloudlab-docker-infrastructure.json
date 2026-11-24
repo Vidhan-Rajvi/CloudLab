@@ -202,7 +202,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "container_fs_usage_bytes{job=\"cloudlab-cadvisor\", name!=\"\"}",
+          "expr": "container_fs_usage_bytes{job=\"cloudlab-cadvisor\", device=~\"overlay|/dev/mapper/.*\"}",
           "legendFormat": "{{name}}",
           "range": true,
           "refId": "A"
@@ -610,5 +610,5 @@
   "timezone": "browser",
   "title": "CloudLab Docker Infrastructure Monitoring",
   "uid": "advpww5",
-  "version": 1
+  "version": 2
 }
