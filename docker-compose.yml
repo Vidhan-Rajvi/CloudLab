@@ -82,6 +82,20 @@ services:
     depends_on:
       - prometheus
 
+  cadvisor:
+    image: ghcr.io/google/cadvisor:v0.61.1
+    container_name: cloudlab-cadvisor
+    restart: unless-stopped
+    privileged: true
+    devices:
+      - /dev/kmsg:/dev/kmsg
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker:/var/lib/docker:ro
+      - /dev/disk:/dev/disk:ro
+
 volumes:
   postgres_data:
   redis_data:
