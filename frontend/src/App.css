@@ -120,6 +120,8 @@
 }
 
 .nav-item {
+  text-decoration: none;
+  cursor: pointer;
   min-height: 43px;
   padding: 0 11px;
   display: flex;

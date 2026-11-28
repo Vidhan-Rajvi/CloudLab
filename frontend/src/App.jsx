@@ -4,6 +4,7 @@ import {
   fetchReadiness,
   fetchLiveness,
 } from './services/api'
+import InfrastructureDesigner from './pages/InfrastructureDesigner'
 import './App.css'
 
 const navigation = [
@@ -25,7 +26,7 @@ function StatusIndicator({ status }) {
   )
 }
 
-function App() {
+function Dashboard() {
   const [root, setRoot] = useState(null)
   const [readiness, setReadiness] = useState(null)
   const [liveness, setLiveness] = useState(null)
@@ -107,22 +108,36 @@ function App() {
         <div className="sidebar-section-label">WORKSPACE</div>
 
         <nav className="sidebar-nav" aria-label="Main navigation">
-          {navigation.map((item) => (
-            <div
-              className={`nav-item ${item.active ? 'active' : ''}`}
-              key={item.label}
-              aria-current={item.active ? 'page' : undefined}
-              title={
-                item.tag
-                  ? `${item.label} will be introduced in Phase ${item.tag}`
-                  : item.label
-              }
-            >
-              <span className="nav-icon">{item.icon}</span>
-              <span className="nav-label">{item.label}</span>
-              {item.tag && <span className="nav-tag">{item.tag}</span>}
-            </div>
-          ))}
+          {navigation.map((item) => {
+            const className = `nav-item ${item.active ? 'active' : ''}`
+
+            const content = (
+              <>
+                <span className="nav-icon">{item.icon}</span>
+                <span className="nav-label">{item.label}</span>
+                {item.tag && <span className="nav-tag">{item.tag}</span>}
+              </>
+            )
+
+            if (item.label === 'Infrastructure Designer') {
+              return (
+                <a
+                  href="/designer"
+                  className={className}
+                  key={item.label}
+                  title="Open Infrastructure Designer"
+                >
+                  {content}
+                </a>
+              )
+            }
+
+            return (
+              <div className={className} key={item.label}>
+                {content}
+              </div>
+            )
+          })}
         </nav>
 
         <div className="sidebar-bottom">
@@ -428,6 +443,12 @@ function App() {
       </main>
     </div>
   )
+}
+
+function App() {
+  const isDesigner = window.location.pathname === '/designer'
+
+  return isDesigner ? <InfrastructureDesigner /> : <Dashboard />
 }
 
 export default App
