@@ -1,7 +1,25 @@
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api'
+
 export const fetchStatus = async () => {
-  const response = await fetch("http://127.0.0.1:8000/");
-  if (!response.ok) {
-    throw new Error("Network response was not ok");
+  const response = await fetch(`${API_BASE_URL}/`, {
+    headers: {
+      Accept: 'application/json',
+    },
+  })
+
+  let data
+
+  try {
+    data = await response.json()
+  } catch {
+    throw new Error('The backend returned an invalid JSON response.')
   }
-  return response.json();
-};
+
+  if (!response.ok) {
+    throw new Error(
+      data?.detail || `API request failed with status ${response.status}`
+    )
+  }
+
+  return data
+}
