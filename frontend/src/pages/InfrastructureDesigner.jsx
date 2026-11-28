@@ -4,72 +4,119 @@ import {
   Background,
   BackgroundVariant,
   Controls,
+  MarkerType,
   MiniMap,
   Panel,
   ReactFlowProvider,
+  addEdge,
+  useEdgesState,
   useNodesState,
   useReactFlow,
 } from '@xyflow/react'
 
 import '@xyflow/react/dist/style.css'
 import InfrastructureNode from '../components/InfrastructureNode'
+import ConfigurationPanel from '../components/ConfigurationPanel'
 import {
   COMPONENT_CATALOG,
   COMPONENT_CATEGORIES,
 } from '../data/componentCatalog'
+import { validateConnection } from '../utils/connectionRules'
+import { getDefaultConfig } from '../utils/componentSchemas'
 import './InfrastructureDesigner.css'
 
 const initialNodes = [
   {
     id: 'cloud-1',
     type: 'infrastructure',
-    position: { x: 100, y: 100 },
+    position: { x: 80, y: 120 },
     data: {
-      label: 'Cloud Environment',
+      label: 'AWS Cloud',
       category: 'CLOUD',
-      description: 'Cloud infrastructure boundary',
+      description: 'Amazon Web Services environment',
       icon: '☁',
-      color: 'purple',
+      color: 'orange',
+      componentId: 'aws-cloud',
+      configured: true,
+      config: getDefaultConfig('aws-cloud', 'CLOUD'),
     },
   },
   {
     id: 'compute-1',
     type: 'infrastructure',
-    position: { x: 420, y: 100 },
+    position: { x: 400, y: 120 },
     data: {
-      label: 'Compute Instance',
+      label: 'Virtual Machine',
       category: 'COMPUTE',
-      description: 'Virtual server resource',
+      description: 'Virtual compute instance',
       icon: '▣',
       color: 'blue',
+      componentId: 'virtual-machine',
+      configured: true,
+      config: getDefaultConfig('virtual-machine', 'COMPUTE'),
     },
   },
   {
     id: 'database-1',
     type: 'infrastructure',
-    position: { x: 740, y: 100 },
+    position: { x: 720, y: 120 },
     data: {
-      label: 'Database',
+      label: 'PostgreSQL',
       category: 'DATABASE',
-      description: 'Data storage resource',
+      description: 'Relational database',
       icon: '▤',
-      color: 'green',
+      color: 'blue',
+      componentId: 'postgresql',
+      configured: true,
+      config: getDefaultConfig('postgresql', 'DATABASE'),
     },
   },
 ]
+
+const initialEdges = []
 
 const nodeTypes = {
   infrastructure: InfrastructureNode,
 }
 
+const defaultEdgeOptions = {
+  type: 'smoothstep',
+  animated: true,
+  markerEnd: {
+    type: MarkerType.ArrowClosed,
+    color: '#8b7cff',
+  },
+  style: {
+    stroke: '#8b7cff',
+    strokeWidth: 2,
+  },
+  labelStyle: {
+    fill: '#dce2f0',
+    fontSize: 10,
+    fontWeight: 600,
+  },
+  labelBgStyle: {
+    fill: '#131c31',
+    fillOpacity: 0.92,
+  },
+  labelBgPadding: [6, 3],
+  labelBgBorderRadius: 5,
+}
+
 function DesignerCanvas() {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes)
+  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges)
   const [searchQuery, setSearchQuery] = useState('')
   const [activeCategory, setActiveCategory] = useState('All')
+  const [feedback, setFeedback] = useState(null)
+  const [configuringNodeId, setConfiguringNodeId] = useState(null)
 
   const nextNodeId = useRef(1)
-
   const { fitView, screenToFlowPosition } = useReactFlow()
+
+  const showFeedback = useCallback((type, message) => {
+    setFeedback({ type, message })
+  }, [])
 
   const filteredComponents = useMemo(() => {
     const query = searchQuery.trim().toLowerCase()
@@ -99,25 +146,29 @@ function DesignerCanvas() {
       if (!template) return
 
       const id = `${template.id}-${Date.now()}-${nextNodeId.current++}`
+      const categoryUpper = template.category.toUpperCase()
 
       const newNode = {
         id,
         type: 'infrastructure',
         position: position || {
           x: 140 + (nodes.length % 4) * 65,
-          y: 260 + (nodes.length % 5) * 55,
+          y: 280 + (nodes.length % 5) * 55,
         },
         data: {
           label: template.label,
-          category: template.category.toUpperCase(),
+          category: categoryUpper,
           description: template.description,
           icon: template.icon,
           color: template.color,
           componentId: template.id,
+          configured: false,
+          config: getDefaultConfig(template.id, categoryUpper),
         },
       }
 
       setNodes((currentNodes) => [...currentNodes, newNode])
+      setFeedback(null)
     },
     [nodes.length, setNodes],
   )
@@ -127,7 +178,6 @@ function DesignerCanvas() {
       'application/cloudlab-component',
       component.id,
     )
-
     event.dataTransfer.effectAllowed = 'move'
   }, [])
 
@@ -160,6 +210,42 @@ function DesignerCanvas() {
     [addNode, screenToFlowPosition],
   )
 
+  const onConnect = useCallback(
+    (connection) => {
+      const sourceNode = nodes.find((n) => n.id === connection.source)
+      const targetNode = nodes.find((n) => n.id === connection.target)
+
+      const validation = validateConnection(sourceNode, targetNode)
+      if (!validation.valid) {
+        showFeedback('error', validation.reason)
+        return
+      }
+
+      const duplicateExists = edges.some(
+        (edge) =>
+          edge.source === connection.source &&
+          edge.target === connection.target,
+      )
+      if (duplicateExists) {
+        showFeedback('error', 'These two resources are already connected.')
+        return
+      }
+
+      const newEdge = {
+        ...connection,
+        id: `edge-${connection.source}-${connection.target}-${Date.now()}`,
+        label: validation.label,
+      }
+
+      setEdges((currentEdges) => addEdge(newEdge, currentEdges))
+      showFeedback(
+        'success',
+        `Connected ${sourceNode.data.label} → ${targetNode.data.label} (${validation.label}).`,
+      )
+    },
+    [edges, nodes, setEdges, showFeedback],
+  )
+
   const duplicateSelected = useCallback(() => {
     setNodes((currentNodes) => {
       const selectedNodes = currentNodes.filter((node) => node.selected)
@@ -174,7 +260,10 @@ function DesignerCanvas() {
           y: node.position.y + 45,
         },
         selected: false,
-        data: { ...node.data },
+        data: {
+          ...node.data,
+          config: node.data.config ? { ...node.data.config } : undefined,
+        },
       }))
 
       return [
@@ -188,12 +277,71 @@ function DesignerCanvas() {
   }, [setNodes])
 
   const deleteSelected = useCallback(() => {
-    setNodes((currentNodes) =>
-      currentNodes.filter((node) => !node.selected),
+    const selectedNodeIds = new Set(
+      nodes.filter((node) => node.selected).map((node) => node.id),
     )
-  }, [setNodes])
 
-  const selectedCount = nodes.filter((node) => node.selected).length
+    if (selectedNodeIds.has(configuringNodeId)) {
+      setConfiguringNodeId(null)
+    }
+
+    if (selectedNodeIds.size > 0) {
+      setNodes((currentNodes) =>
+        currentNodes.filter((node) => !selectedNodeIds.has(node.id)),
+      )
+      setEdges((currentEdges) =>
+        currentEdges.filter(
+          (edge) =>
+            !edge.selected &&
+            !selectedNodeIds.has(edge.source) &&
+            !selectedNodeIds.has(edge.target),
+        ),
+      )
+      return
+    }
+
+    setEdges((currentEdges) =>
+      currentEdges.filter((edge) => !edge.selected),
+    )
+  }, [configuringNodeId, nodes, setEdges, setNodes])
+
+  const handleSaveNodeConfig = useCallback(
+    (nodeId, updatedData) => {
+      setNodes((currentNodes) =>
+        currentNodes.map((node) =>
+          node.id === nodeId
+            ? {
+                ...node,
+                data: {
+                  ...node.data,
+                  ...updatedData,
+                },
+              }
+            : node,
+        ),
+      )
+      setConfiguringNodeId(null)
+      showFeedback('success', `Updated configuration for ${updatedData.label}.`)
+    },
+    [setNodes, showFeedback],
+  )
+
+  const selectedNodes = nodes.filter((node) => node.selected)
+  const selectedEdges = edges.filter((edge) => edge.selected)
+  const selectedCount = selectedNodes.length
+  const selectedEdgeCount = selectedEdges.length
+  const hasSelection = selectedCount > 0 || selectedEdgeCount > 0
+
+  const configuringNode = useMemo(
+    () => nodes.find((node) => node.id === configuringNodeId) || null,
+    [configuringNodeId, nodes],
+  )
+
+  const openConfigureForSelected = useCallback(() => {
+    if (selectedNodes.length === 1) {
+      setConfiguringNodeId(selectedNodes[0].id)
+    }
+  }, [selectedNodes])
 
   return (
     <div className="designer-page">
@@ -316,21 +464,27 @@ function DesignerCanvas() {
             </div>
 
             <div className="canvas-info-row">
-              <span>Selected</span>
-              <strong>{selectedCount}</strong>
+              <span>Connections</span>
+              <strong>{edges.length}</strong>
             </div>
 
             <div className="canvas-info-row">
-              <span>Connections</span>
-              <strong>0</strong>
+              <span>Selected</span>
+              <strong>
+                {selectedCount > 0
+                  ? `${selectedCount} node${selectedCount > 1 ? 's' : ''}`
+                  : selectedEdgeCount > 0
+                    ? `${selectedEdgeCount} link${selectedEdgeCount > 1 ? 's' : ''}`
+                    : '0'}
+              </strong>
             </div>
           </div>
 
           <div className="designer-sidebar-note">
             <span>ⓘ</span>
             <p>
-              This is a local canvas prototype. Connections and persistent
-              saving will be introduced in later phases.
+              Drag from a blue/purple handle to connect resources. Select a
+              node and click Configure to edit its properties.
             </p>
           </div>
         </aside>
@@ -340,10 +494,20 @@ function DesignerCanvas() {
             <div>
               <div className="canvas-eyebrow">VISUAL WORKSPACE</div>
               <h1>Infrastructure Canvas</h1>
-              <p>Arrange your cloud resources visually.</p>
+              <p>Connect and configure your cloud resources visually.</p>
             </div>
 
             <div className="canvas-actions">
+              <button
+                type="button"
+                className="canvas-action secondary"
+                onClick={openConfigureForSelected}
+                disabled={selectedCount !== 1}
+                title="Select a single resource to configure"
+              >
+                Configure
+              </button>
+
               <button
                 type="button"
                 className="canvas-action secondary"
@@ -357,7 +521,7 @@ function DesignerCanvas() {
                 type="button"
                 className="canvas-action danger"
                 onClick={deleteSelected}
-                disabled={selectedCount === 0}
+                disabled={!hasSelection}
               >
                 Delete
               </button>
@@ -372,71 +536,99 @@ function DesignerCanvas() {
             </div>
           </div>
 
-          <div
-            className="canvas-container"
-            onDrop={onDrop}
-            onDragOver={onDragOver}
-          >
-            <ReactFlow
-              nodes={nodes}
-              onNodesChange={onNodesChange}
-              nodeTypes={nodeTypes}
-              fitView
-              fitViewOptions={{ padding: 0.2 }}
-              minZoom={0.2}
-              maxZoom={1.5}
-              nodesConnectable={false}
-              nodesDraggable
-              elementsSelectable
-              deleteKeyCode="Delete"
-              panOnDrag
-              zoomOnScroll
-              selectionOnDrag={false}
-              proOptions={{ hideAttribution: false }}
+          {feedback && (
+            <div className={`canvas-feedback ${feedback.type}`} role="status">
+              <span>{feedback.message}</span>
+              <button
+                type="button"
+                onClick={() => setFeedback(null)}
+                aria-label="Dismiss message"
+              >
+                ✕
+              </button>
+            </div>
+          )}
+
+          <div className="canvas-workspace-body">
+            <div
+              className="canvas-container"
+              onDrop={onDrop}
+              onDragOver={onDragOver}
             >
-              <Background
-                variant={BackgroundVariant.Dots}
-                gap={22}
-                size={1}
-                color="#35405b"
+              <ReactFlow
+                nodes={nodes}
+                edges={edges}
+                onNodesChange={onNodesChange}
+                onEdgesChange={onEdgesChange}
+                onConnect={onConnect}
+                nodeTypes={nodeTypes}
+                defaultEdgeOptions={defaultEdgeOptions}
+                fitView
+                fitViewOptions={{ padding: 0.2 }}
+                minZoom={0.2}
+                maxZoom={1.5}
+                nodesConnectable
+                nodesDraggable
+                elementsSelectable
+                deleteKeyCode={['Delete', 'Backspace']}
+                panOnDrag
+                zoomOnScroll
+                selectionOnDrag={false}
+                proOptions={{ hideAttribution: false }}
+              >
+                <Background
+                  variant={BackgroundVariant.Dots}
+                  gap={22}
+                  size={1}
+                  color="#35405b"
+                />
+
+                <Controls
+                  showInteractive={false}
+                  position="bottom-left"
+                />
+
+                <MiniMap
+                  position="bottom-right"
+                  pannable
+                  zoomable
+                  nodeColor={(node) => {
+                    const colors = {
+                      purple: '#8b7cff',
+                      blue: '#54a9ef',
+                      green: '#35d39a',
+                      orange: '#f6a65c',
+                      cyan: '#4dc9d9',
+                      red: '#ff8992',
+                    }
+
+                    return colors[node.data?.color] || '#8b7cff'
+                  }}
+                  maskColor="rgba(8, 13, 25, 0.72)"
+                />
+
+                <Panel position="top-left" className="canvas-hint">
+                  Drag from node handles to connect · Select a node to configure
+                </Panel>
+              </ReactFlow>
+            </div>
+
+            {configuringNode && (
+              <ConfigurationPanel
+                node={configuringNode}
+                onSave={handleSaveNodeConfig}
+                onClose={() => setConfiguringNodeId(null)}
               />
-
-              <Controls
-                showInteractive={false}
-                position="bottom-left"
-              />
-
-              <MiniMap
-                position="bottom-right"
-                pannable
-                zoomable
-                nodeColor={(node) => {
-                  const colors = {
-                    purple: '#8b7cff',
-                    blue: '#54a9ef',
-                    green: '#35d39a',
-                    orange: '#f6a65c',
-                    cyan: '#4dc9d9',
-                  }
-
-                  return colors[node.data?.color] || '#8b7cff'
-                }}
-                maskColor="rgba(8, 13, 25, 0.72)"
-              />
-
-              <Panel position="top-left" className="canvas-hint">
-                Drag nodes to arrange your infrastructure
-              </Panel>
-            </ReactFlow>
+            )}
           </div>
 
           <div className="canvas-footer">
             <span>
               <span className="designer-live-dot" />
-              Canvas ready
+              Canvas ready · {edges.length} connection{edges.length === 1 ? '' : 's'}
             </span>
-            <span>Drag · Select · Move · Zoom</span>
-            <span>Phase 9.4 · Component Library</span>
+            <span>Connect · Configure · Validate · Zoom</span>
+            <span>Phase 9.5 · Connections & Configuration</span>
           </div>
         </main>
       </div>

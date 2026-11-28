@@ -826,3 +826,217 @@
     font-size: 9px;
   }
 }
+
+
+/* =========================================
+   PHASE 9.5 - CONNECTIONS & CONFIGURATION
+========================================= */
+
+.node-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.node-region-badge {
+  padding: 3px 6px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 5px;
+  background: rgba(15, 23, 42, 0.7);
+  color: #93a1ba;
+  font-size: 8px;
+  font-weight: 600;
+}
+
+.node-status-dot.configured {
+  background: #35d39a;
+  box-shadow: 0 0 8px rgba(53, 211, 154, 0.5);
+}
+
+.node-summary-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.node-handle {
+  width: 10px !important;
+  height: 10px !important;
+  border: 2px solid #0c1221 !important;
+  transition: transform 0.15s ease, background-color 0.15s ease;
+}
+
+.node-handle.source {
+  background: #8b7cff !important;
+}
+
+.node-handle.target {
+  background: #54a9ef !important;
+}
+
+.infrastructure-node:hover .node-handle,
+.infrastructure-node.selected .node-handle {
+  transform: scale(1.25);
+}
+
+.canvas-container .react-flow__edge.selected .react-flow__edge-path {
+  stroke: #35d39a !important;
+  stroke-width: 3px !important;
+}
+
+.canvas-feedback {
+  margin-bottom: 12px;
+  padding: 9px 13px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-radius: 9px;
+  font-size: 11px;
+}
+
+.canvas-feedback.success {
+  border: 1px solid rgba(53, 211, 154, 0.3);
+  background: rgba(53, 211, 154, 0.1);
+  color: #7ae9c0;
+}
+
+.canvas-feedback.error {
+  border: 1px solid rgba(240, 108, 121, 0.32);
+  background: rgba(240, 108, 121, 0.11);
+  color: #f69ca4;
+}
+
+.canvas-feedback button {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.canvas-workspace-body {
+  min-height: 0;
+  flex: 1;
+  display: flex;
+  gap: 14px;
+}
+
+.config-panel {
+  width: 295px;
+  flex-shrink: 0;
+  padding: 18px 16px;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 12px;
+  background: #0c1221;
+  overflow-y: auto;
+}
+
+.config-panel-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  padding-bottom: 13px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+}
+
+.config-eyebrow {
+  color: #978aff;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1.2px;
+}
+
+.config-panel-header h3 {
+  margin: 4px 0 0;
+  color: #eef2fa;
+  font-size: 14px;
+}
+
+.config-close-btn {
+  width: 26px;
+  height: 26px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.04);
+  color: #9aa6bd;
+  cursor: pointer;
+}
+
+.config-form {
+  margin-top: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.config-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.config-field span {
+  color: #9aa6bd;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.config-field input,
+.config-field select {
+  min-height: 35px;
+  padding: 0 10px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 8px;
+  background: #080d19;
+  color: #e8edf8;
+  font: inherit;
+  font-size: 11px;
+}
+
+.config-field input:focus,
+.config-field select:focus {
+  outline: none;
+  border-color: #8b7cff;
+}
+
+.config-divider {
+  margin-top: 4px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(148, 163, 184, 0.1);
+  color: #74819b;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+
+.config-error {
+  padding: 8px 10px;
+  border: 1px solid rgba(240, 108, 121, 0.3);
+  border-radius: 7px;
+  background: rgba(240, 108, 121, 0.1);
+  color: #f69ca4;
+  font-size: 10px;
+}
+
+.config-actions {
+  margin-top: 6px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+@media (max-width: 960px) {
+  .canvas-workspace-body {
+    flex-direction: column;
+  }
+
+  .config-panel {
+    width: 100%;
+    max-height: 260px;
+  }
+}
