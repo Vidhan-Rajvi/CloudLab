@@ -1,4 +1,4 @@
-import { useCallback, useRef } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import {
   ReactFlow,
   Background,
@@ -13,6 +13,10 @@ import {
 
 import '@xyflow/react/dist/style.css'
 import InfrastructureNode from '../components/InfrastructureNode'
+import {
+  COMPONENT_CATALOG,
+  COMPONENT_CATEGORIES,
+} from '../data/componentCatalog'
 import './InfrastructureDesigner.css'
 
 const initialNodes = [
@@ -58,70 +62,102 @@ const nodeTypes = {
   infrastructure: InfrastructureNode,
 }
 
-const componentTemplates = {
-  cloud: {
-    label: 'Cloud Environment',
-    category: 'CLOUD',
-    description: 'Cloud infrastructure boundary',
-    icon: '☁',
-    color: 'purple',
-  },
-  compute: {
-    label: 'Compute Instance',
-    category: 'COMPUTE',
-    description: 'Virtual server resource',
-    icon: '▣',
-    color: 'blue',
-  },
-  database: {
-    label: 'Database',
-    category: 'DATABASE',
-    description: 'Data storage resource',
-    icon: '▤',
-    color: 'green',
-  },
-  storage: {
-    label: 'Storage',
-    category: 'STORAGE',
-    description: 'Cloud storage resource',
-    icon: '▧',
-    color: 'orange',
-  },
-  network: {
-    label: 'Network',
-    category: 'NETWORK',
-    description: 'Network infrastructure resource',
-    icon: '⌘',
-    color: 'cyan',
-  },
-}
-
 function DesignerCanvas() {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [activeCategory, setActiveCategory] = useState('All')
+
   const nextNodeId = useRef(1)
-  const { fitView } = useReactFlow()
+
+  const { fitView, screenToFlowPosition } = useReactFlow()
+
+  const filteredComponents = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase()
+
+    return COMPONENT_CATALOG.filter((component) => {
+      const matchesCategory =
+        activeCategory === 'All' ||
+        component.category === activeCategory
+
+      const matchesSearch =
+        !query ||
+        component.label.toLowerCase().includes(query) ||
+        component.description.toLowerCase().includes(query) ||
+        component.category.toLowerCase().includes(query)
+
+      return matchesCategory && matchesSearch
+    })
+  }, [activeCategory, searchQuery])
 
   const addNode = useCallback(
-    (type) => {
-      const template = componentTemplates[type]
+    (component, position) => {
+      const template =
+        typeof component === 'string'
+          ? COMPONENT_CATALOG.find((item) => item.id === component)
+          : component
 
       if (!template) return
 
-      const id = `${type}-${Date.now()}-${nextNodeId.current++}`
+      const id = `${template.id}-${Date.now()}-${nextNodeId.current++}`
 
       const newNode = {
         id,
         type: 'infrastructure',
-        position: {
+        position: position || {
           x: 140 + (nodes.length % 4) * 65,
           y: 260 + (nodes.length % 5) * 55,
         },
-        data: { ...template },
+        data: {
+          label: template.label,
+          category: template.category.toUpperCase(),
+          description: template.description,
+          icon: template.icon,
+          color: template.color,
+          componentId: template.id,
+        },
       }
 
       setNodes((currentNodes) => [...currentNodes, newNode])
     },
     [nodes.length, setNodes],
+  )
+
+  const onDragStart = useCallback((event, component) => {
+    event.dataTransfer.setData(
+      'application/cloudlab-component',
+      component.id,
+    )
+
+    event.dataTransfer.effectAllowed = 'move'
+  }, [])
+
+  const onDragOver = useCallback((event) => {
+    event.preventDefault()
+    event.dataTransfer.dropEffect = 'move'
+  }, [])
+
+  const onDrop = useCallback(
+    (event) => {
+      event.preventDefault()
+
+      const componentId = event.dataTransfer.getData(
+        'application/cloudlab-component',
+      )
+
+      const component = COMPONENT_CATALOG.find(
+        (item) => item.id === componentId,
+      )
+
+      if (!component) return
+
+      const position = screenToFlowPosition({
+        x: event.clientX,
+        y: event.clientY,
+      })
+
+      addNode(component, position)
+    },
+    [addNode, screenToFlowPosition],
   )
 
   const duplicateSelected = useCallback(() => {
@@ -192,74 +228,83 @@ function DesignerCanvas() {
             <span className="tool-count">{nodes.length}</span>
           </div>
 
-          <div className="designer-tool-section">
-            <h3>Quick components</h3>
-            <p>Add a resource to your canvas.</p>
+          <div className="designer-tool-section component-library">
+            <div className="library-heading">
+              <div>
+                <h3>Component Library</h3>
+                <p>Search, select or drag resources onto the canvas.</p>
+              </div>
 
-            <button
-              className="component-tool"
-              onClick={() => addNode('cloud')}
-              type="button"
-            >
-              <span className="tool-icon purple">☁</span>
-              <span>
-                <strong>Cloud</strong>
-                <small>Cloud environment</small>
+              <span className="library-total">
+                {COMPONENT_CATALOG.length}
               </span>
-              <span className="tool-plus">+</span>
-            </button>
+            </div>
 
-            <button
-              className="component-tool"
-              onClick={() => addNode('compute')}
-              type="button"
-            >
-              <span className="tool-icon blue">▣</span>
-              <span>
-                <strong>Compute</strong>
-                <small>Virtual server</small>
-              </span>
-              <span className="tool-plus">+</span>
-            </button>
+            <label className="library-search">
+              <span aria-hidden="true">⌕</span>
+              <input
+                type="search"
+                placeholder="Search components..."
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                aria-label="Search infrastructure components"
+              />
+            </label>
 
-            <button
-              className="component-tool"
-              onClick={() => addNode('database')}
-              type="button"
-            >
-              <span className="tool-icon green">▤</span>
-              <span>
-                <strong>Database</strong>
-                <small>Data resource</small>
-              </span>
-              <span className="tool-plus">+</span>
-            </button>
+            <div className="library-categories" aria-label="Component categories">
+              {COMPONENT_CATEGORIES.map((category) => (
+                <button
+                  key={category}
+                  type="button"
+                  className={`category-filter ${
+                    activeCategory === category ? 'active' : ''
+                  }`}
+                  onClick={() => setActiveCategory(category)}
+                >
+                  {category}
+                </button>
+              ))}
+            </div>
 
-            <button
-              className="component-tool"
-              onClick={() => addNode('storage')}
-              type="button"
-            >
-              <span className="tool-icon orange">▧</span>
-              <span>
-                <strong>Storage</strong>
-                <small>Storage resource</small>
-              </span>
-              <span className="tool-plus">+</span>
-            </button>
+            <div className="library-results" aria-live="polite">
+              <div className="library-results-heading">
+                <span>
+                  {activeCategory === 'All' ? 'ALL RESOURCES' : activeCategory.toUpperCase()}
+                </span>
+                <span>{filteredComponents.length} items</span>
+              </div>
 
-            <button
-              className="component-tool"
-              onClick={() => addNode('network')}
-              type="button"
-            >
-              <span className="tool-icon cyan">⌘</span>
-              <span>
-                <strong>Network</strong>
-                <small>Network resource</small>
-              </span>
-              <span className="tool-plus">+</span>
-            </button>
+              {filteredComponents.length > 0 ? (
+                filteredComponents.map((component) => (
+                  <button
+                    key={component.id}
+                    className="component-tool"
+                    type="button"
+                    draggable
+                    onClick={() => addNode(component)}
+                    onDragStart={(event) => onDragStart(event, component)}
+                    title={`Add or drag ${component.label} to the canvas`}
+                  >
+                    <span className={`tool-icon ${component.color}`}>
+                      {component.icon}
+                    </span>
+
+                    <span>
+                      <strong>{component.label}</strong>
+                      <small>{component.description}</small>
+                    </span>
+
+                    <span className="tool-plus">+</span>
+                  </button>
+                ))
+              ) : (
+                <div className="library-empty">
+                  <span>⌕</span>
+                  <strong>No components found</strong>
+                  <small>Try another search or category.</small>
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="designer-sidebar-section">
@@ -327,7 +372,11 @@ function DesignerCanvas() {
             </div>
           </div>
 
-          <div className="canvas-container">
+          <div
+            className="canvas-container"
+            onDrop={onDrop}
+            onDragOver={onDragOver}
+          >
             <ReactFlow
               nodes={nodes}
               onNodesChange={onNodesChange}
@@ -387,7 +436,7 @@ function DesignerCanvas() {
               Canvas ready
             </span>
             <span>Drag · Select · Move · Zoom</span>
-            <span>Phase 9.3</span>
+            <span>Phase 9.4 · Component Library</span>
           </div>
         </main>
       </div>

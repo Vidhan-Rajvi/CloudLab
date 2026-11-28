@@ -9,7 +9,7 @@ import './App.css'
 
 const navigation = [
   { icon: '◈', label: 'Overview', active: true },
-  { icon: '▦', label: 'Infrastructure Designer', tag: '9.3' },
+  { icon: '▦', label: 'Infrastructure Designer', tag: '9.4' },
   { icon: '⌁', label: 'Simulations', tag: 'Soon' },
   { icon: '⇧', label: 'Deployments', tag: 'Soon' },
   { icon: '◉', label: 'Monitoring', tag: 'Soon' },
