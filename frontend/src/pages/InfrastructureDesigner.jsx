@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ReactFlow,
   Background,
@@ -23,9 +23,16 @@ import {
 } from '../data/componentCatalog'
 import { validateConnection } from '../utils/connectionRules'
 import { getDefaultConfig } from '../utils/componentSchemas'
+import {
+  createDesign,
+  deleteDesign,
+  fetchDesignById,
+  fetchDesigns,
+  updateDesign,
+} from '../services/api'
 import './InfrastructureDesigner.css'
 
-const initialNodes = [
+const buildInitialNodes = () => [
   {
     id: 'cloud-1',
     type: 'infrastructure',
@@ -73,8 +80,6 @@ const initialNodes = [
   },
 ]
 
-const initialEdges = []
-
 const nodeTypes = {
   infrastructure: InfrastructureNode,
 }
@@ -103,13 +108,50 @@ const defaultEdgeOptions = {
   labelBgBorderRadius: 5,
 }
 
+function serializeNodesForSave(nodes) {
+  return nodes.map((node) => ({
+    id: node.id,
+    type: node.type || 'infrastructure',
+    position: {
+      x: Math.round(node.position.x * 100) / 100,
+      y: Math.round(node.position.y * 100) / 100,
+    },
+    data: { ...node.data },
+  }))
+}
+
+function serializeEdgesForSave(edges) {
+  return edges.map((edge) => ({
+    id: edge.id,
+    source: edge.source,
+    target: edge.target,
+    sourceHandle: edge.sourceHandle || null,
+    targetHandle: edge.targetHandle || null,
+    label: edge.label || '',
+    type: edge.type || 'smoothstep',
+    animated: edge.animated ?? true,
+  }))
+}
+
 function DesignerCanvas() {
-  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes)
-  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges)
+  const [nodes, setNodes, onNodesChange] = useNodesState(buildInitialNodes)
+  const [edges, setEdges, onEdgesChange] = useEdgesState([])
   const [searchQuery, setSearchQuery] = useState('')
   const [activeCategory, setActiveCategory] = useState('All')
   const [feedback, setFeedback] = useState(null)
   const [configuringNodeId, setConfiguringNodeId] = useState(null)
+
+  // Phase 9.6 — Design persistence state
+  const [activeDesignId, setActiveDesignId] = useState(null)
+  const [designName, setDesignName] = useState('Untitled Architecture')
+  const [designDescription, setDesignDescription] = useState('')
+  const [savedDesigns, setSavedDesigns] = useState([])
+  const [loadingDesigns, setLoadingDesigns] = useState(false)
+  const [savingDesign, setSavingDesign] = useState(false)
+  const [busyDesignId, setBusyDesignId] = useState(null)
+  const [isDesignModalOpen, setIsDesignModalOpen] = useState(false)
+  const [modalTab, setModalTab] = useState('save')
+  const [modalError, setModalError] = useState('')
 
   const nextNodeId = useRef(1)
   const { fitView, screenToFlowPosition } = useReactFlow()
@@ -117,6 +159,22 @@ function DesignerCanvas() {
   const showFeedback = useCallback((type, message) => {
     setFeedback({ type, message })
   }, [])
+
+  const refreshSavedDesigns = useCallback(async () => {
+    setLoadingDesigns(true)
+    try {
+      const list = await fetchDesigns()
+      setSavedDesigns(list)
+    } catch (err) {
+      setModalError(err.message || 'Unable to load saved designs.')
+    } finally {
+      setLoadingDesigns(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    refreshSavedDesigns()
+  }, [refreshSavedDesigns])
 
   const filteredComponents = useMemo(() => {
     const query = searchQuery.trim().toLowerCase()
@@ -326,6 +384,129 @@ function DesignerCanvas() {
     [setNodes, showFeedback],
   )
 
+  // Phase 9.6 — Save, Load, Update, New & Delete handlers
+  const openModal = useCallback(
+    (tab) => {
+      setModalTab(tab)
+      setModalError('')
+      setIsDesignModalOpen(true)
+      refreshSavedDesigns()
+    },
+    [refreshSavedDesigns],
+  )
+
+  const handleSaveDesignSubmit = async (event, saveAsNew = false) => {
+    if (event) event.preventDefault()
+
+    const cleanName = designName.trim()
+    if (!cleanName) {
+      setModalError('Please enter a name for your infrastructure design.')
+      return
+    }
+
+    setSavingDesign(true)
+    setModalError('')
+
+    const payload = {
+      name: cleanName,
+      description: designDescription.trim(),
+      nodes: serializeNodesForSave(nodes),
+      edges: serializeEdgesForSave(edges),
+    }
+
+    try {
+      const saved =
+        activeDesignId && !saveAsNew
+          ? await updateDesign(activeDesignId, payload)
+          : await createDesign(payload)
+
+      setActiveDesignId(saved.id)
+      setDesignName(saved.name)
+      setDesignDescription(saved.description || '')
+      setIsDesignModalOpen(false)
+      await refreshSavedDesigns()
+      showFeedback(
+        'success',
+        `${activeDesignId && !saveAsNew ? 'Updated' : 'Saved'} design "${saved.name}" (#${saved.id}) in PostgreSQL.`,
+      )
+    } catch (err) {
+      setModalError(err.message || 'Failed to save infrastructure design.')
+    } finally {
+      setSavingDesign(false)
+    }
+  }
+
+  const handleQuickSave = () => {
+    if (activeDesignId) {
+      handleSaveDesignSubmit(null, false)
+    } else {
+      openModal('save')
+    }
+  }
+
+  const handleLoadDesign = async (designId) => {
+    setBusyDesignId(designId)
+    setModalError('')
+    try {
+      const design = await fetchDesignById(designId)
+      const restoredNodes = (design.nodes || []).map((node) => ({
+        ...node,
+        type: node.type || 'infrastructure',
+        selected: false,
+      }))
+      const restoredEdges = (design.edges || []).map((edge) => ({
+        ...edge,
+        selected: false,
+      }))
+
+      setConfiguringNodeId(null)
+      setNodes(restoredNodes)
+      setEdges(restoredEdges)
+      setActiveDesignId(design.id)
+      setDesignName(design.name)
+      setDesignDescription(design.description || '')
+      setIsDesignModalOpen(false)
+      showFeedback(
+        'success',
+        `Loaded design "${design.name}" (${restoredNodes.length} nodes, ${restoredEdges.length} connections).`,
+      )
+      setTimeout(() => fitView({ padding: 0.2, duration: 300 }), 60)
+    } catch (err) {
+      setModalError(err.message || 'Failed to load infrastructure design.')
+    } finally {
+      setBusyDesignId(null)
+    }
+  }
+
+  const handleDeleteSavedDesign = async (design) => {
+    setBusyDesignId(design.id)
+    setModalError('')
+    try {
+      await deleteDesign(design.id)
+      if (activeDesignId === design.id) {
+        setActiveDesignId(null)
+      }
+      await refreshSavedDesigns()
+      showFeedback('success', `Deleted saved design "${design.name}".`)
+    } catch (err) {
+      setModalError(err.message || 'Failed to delete saved design.')
+    } finally {
+      setBusyDesignId(null)
+    }
+  }
+
+  const handleStartNewDesign = () => {
+    setConfiguringNodeId(null)
+    setNodes(buildInitialNodes())
+    setEdges([])
+    setActiveDesignId(null)
+    setDesignName('Untitled Architecture')
+    setDesignDescription('')
+    setIsDesignModalOpen(false)
+    showFeedback('success', 'Started a fresh design canvas.')
+    setTimeout(() => fitView({ padding: 0.2, duration: 300 }), 60)
+  }
+
   const selectedNodes = nodes.filter((node) => node.selected)
   const selectedEdges = edges.filter((edge) => edge.selected)
   const selectedCount = selectedNodes.length
@@ -361,12 +542,58 @@ function DesignerCanvas() {
 
         <div className="designer-topbar-center">
           <span className="designer-live-dot" />
-          Local design workspace
+          <span>{designName}</span>
+          {activeDesignId ? (
+            <span className="design-id-pill">Saved #{activeDesignId}</span>
+          ) : (
+            <span className="design-id-pill unsaved">Unsaved draft</span>
+          )}
         </div>
 
-        <a href="/" className="dashboard-link">
-          Overview
-        </a>
+        <div className="designer-topbar-actions">
+          <button
+            type="button"
+            className="canvas-action secondary"
+            onClick={handleStartNewDesign}
+            title="Start a new design"
+          >
+            New
+          </button>
+
+          <button
+            type="button"
+            className="canvas-action secondary"
+            onClick={() => openModal('load')}
+            title="Browse and load saved designs"
+          >
+            Load ({savedDesigns.length})
+          </button>
+
+          <button
+            type="button"
+            className="canvas-action primary"
+            onClick={handleQuickSave}
+            disabled={savingDesign}
+            title="Save design to PostgreSQL"
+          >
+            {savingDesign ? 'Saving...' : activeDesignId ? 'Save' : 'Save Design'}
+          </button>
+
+          {activeDesignId && (
+            <button
+              type="button"
+              className="canvas-action secondary"
+              onClick={() => openModal('save')}
+              title="Edit name/description or save a copy"
+            >
+              Save As
+            </button>
+          )}
+
+          <a href="/" className="dashboard-link">
+            Overview
+          </a>
+        </div>
       </header>
 
       <div className="designer-workspace">
@@ -469,6 +696,11 @@ function DesignerCanvas() {
             </div>
 
             <div className="canvas-info-row">
+              <span>Saved Designs</span>
+              <strong>{savedDesigns.length}</strong>
+            </div>
+
+            <div className="canvas-info-row">
               <span>Selected</span>
               <strong>
                 {selectedCount > 0
@@ -483,8 +715,8 @@ function DesignerCanvas() {
           <div className="designer-sidebar-note">
             <span>ⓘ</span>
             <p>
-              Drag from a blue/purple handle to connect resources. Select a
-              node and click Configure to edit its properties.
+              Use Save Design and Load in the top bar to persist your
+              architecture in PostgreSQL across sessions.
             </p>
           </div>
         </aside>
@@ -494,7 +726,7 @@ function DesignerCanvas() {
             <div>
               <div className="canvas-eyebrow">VISUAL WORKSPACE</div>
               <h1>Infrastructure Canvas</h1>
-              <p>Connect and configure your cloud resources visually.</p>
+              <p>Connect, configure, and persist your cloud architecture.</p>
             </div>
 
             <div className="canvas-actions">
@@ -608,7 +840,7 @@ function DesignerCanvas() {
                 />
 
                 <Panel position="top-left" className="canvas-hint">
-                  Drag from node handles to connect · Select a node to configure
+                  Drag from node handles to connect · Click Save Design to persist
                 </Panel>
               </ReactFlow>
             </div>
@@ -627,11 +859,186 @@ function DesignerCanvas() {
               <span className="designer-live-dot" />
               Canvas ready · {edges.length} connection{edges.length === 1 ? '' : 's'}
             </span>
-            <span>Connect · Configure · Validate · Zoom</span>
-            <span>Phase 9.5 · Connections & Configuration</span>
+            <span>Connect · Configure · Save · Load</span>
+            <span>Phase 9.6 · Design Persistence</span>
           </div>
         </main>
       </div>
+
+      {isDesignModalOpen && (
+        <div
+          className="design-modal-backdrop"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Infrastructure Design Manager"
+        >
+          <div className="design-modal">
+            <div className="design-modal-header">
+              <div>
+                <span className="config-eyebrow">POSTGRESQL PERSISTENCE</span>
+                <h3>Infrastructure Design Manager</h3>
+              </div>
+              <button
+                type="button"
+                className="config-close-btn"
+                onClick={() => setIsDesignModalOpen(false)}
+                aria-label="Close design manager"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="design-modal-tabs">
+              <button
+                type="button"
+                className={`design-tab ${modalTab === 'save' ? 'active' : ''}`}
+                onClick={() => {
+                  setModalTab('save')
+                  setModalError('')
+                }}
+              >
+                Save Design
+              </button>
+              <button
+                type="button"
+                className={`design-tab ${modalTab === 'load' ? 'active' : ''}`}
+                onClick={() => {
+                  setModalTab('load')
+                  setModalError('')
+                  refreshSavedDesigns()
+                }}
+              >
+                Saved Designs ({savedDesigns.length})
+              </button>
+            </div>
+
+            {modalError && <div className="config-error">{modalError}</div>}
+
+            {modalTab === 'save' ? (
+              <form
+                className="design-modal-body"
+                onSubmit={(event) => handleSaveDesignSubmit(event, false)}
+              >
+                <label className="config-field">
+                  <span>Design Name *</span>
+                  <input
+                    type="text"
+                    value={designName}
+                    onChange={(event) => setDesignName(event.target.value)}
+                    placeholder="e.g., Production AWS 3-Tier Web Stack"
+                    maxLength={120}
+                  />
+                </label>
+
+                <label className="config-field">
+                  <span>Description</span>
+                  <input
+                    type="text"
+                    value={designDescription}
+                    onChange={(event) => setDesignDescription(event.target.value)}
+                    placeholder="Optional notes about this cloud architecture"
+                    maxLength={1000}
+                  />
+                </label>
+
+                <div className="design-save-summary">
+                  <span>Nodes: <strong>{nodes.length}</strong></span>
+                  <span>Connections: <strong>{edges.length}</strong></span>
+                  <span>
+                    Target: <strong>{activeDesignId ? `Design #${activeDesignId}` : 'New record'}</strong>
+                  </span>
+                </div>
+
+                <div className="config-actions">
+                  <button
+                    type="button"
+                    className="canvas-action secondary"
+                    onClick={() => setIsDesignModalOpen(false)}
+                  >
+                    Cancel
+                  </button>
+
+                  {activeDesignId && (
+                    <button
+                      type="button"
+                      className="canvas-action secondary"
+                      disabled={savingDesign}
+                      onClick={() => handleSaveDesignSubmit(null, true)}
+                    >
+                      Save as New Copy
+                    </button>
+                  )}
+
+                  <button
+                    type="submit"
+                    className="canvas-action primary"
+                    disabled={savingDesign}
+                  >
+                    {savingDesign
+                      ? 'Saving...'
+                      : activeDesignId
+                        ? 'Update Design'
+                        : 'Save Design'}
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <div className="design-modal-body">
+                {loadingDesigns ? (
+                  <p className="design-empty-state">Loading saved designs...</p>
+                ) : savedDesigns.length === 0 ? (
+                  <p className="design-empty-state">
+                    No saved infrastructure designs yet. Switch to Save Design to store your first architecture.
+                  </p>
+                ) : (
+                  <div className="saved-design-list">
+                    {savedDesigns.map((item) => (
+                      <div
+                        key={item.id}
+                        className={`saved-design-card ${
+                          activeDesignId === item.id ? 'active' : ''
+                        }`}
+                      >
+                        <div className="saved-design-meta">
+                          <div className="saved-design-title">
+                            <strong>{item.name}</strong>
+                            <span className="design-id-pill">#{item.id}</span>
+                          </div>
+                          {item.description && <p>{item.description}</p>}
+                          <small>
+                            {item.node_count} nodes · {item.edge_count} connections · Updated{' '}
+                            {new Date(item.updated_at).toLocaleString()}
+                          </small>
+                        </div>
+
+                        <div className="saved-design-actions">
+                          <button
+                            type="button"
+                            className="canvas-action primary"
+                            disabled={busyDesignId === item.id}
+                            onClick={() => handleLoadDesign(item.id)}
+                          >
+                            {busyDesignId === item.id ? 'Loading...' : 'Load'}
+                          </button>
+
+                          <button
+                            type="button"
+                            className="canvas-action danger"
+                            disabled={busyDesignId === item.id}
+                            onClick={() => handleDeleteSavedDesign(item)}
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -1,4 +1,7 @@
+from datetime import datetime
+from typing import Any, List, Optional
 from pydantic import BaseModel, Field
+
 
 # -----------------------------
 # User Schemas
@@ -12,7 +15,7 @@ class UserCreate(BaseModel):
     email: str = Field(
         min_length=5,
         max_length=100,
-        pattern=r"^[\w\.-]+@[\w\.-]+\.\w+$",
+        pattern=r"^[\w\.-]+@[\w\.-]+\.\w+\$",
         description="User Email"
     )
     password: str = Field(
@@ -38,7 +41,7 @@ class LoginRequest(BaseModel):
     email: str = Field(
         min_length=5,
         max_length=100,
-        pattern=r"^[\w\.-]+@[\w\.-]+\.\w+$",
+        pattern=r"^[\w\.-]+@[\w\.-]+\.\w+\$",
         description="User Email"
     )
     password: str = Field(
@@ -54,3 +57,45 @@ class Token(BaseModel):
 
 class TokenData(BaseModel):
     email: str | None = None
+
+
+# -----------------------------
+# Infrastructure Design Schemas (Phase 9.6)
+# -----------------------------
+class DesignCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=120, description="Design name")
+    description: Optional[str] = Field(default="", max_length=1000)
+    nodes: List[dict[str, Any]] = Field(default_factory=list)
+    edges: List[dict[str, Any]] = Field(default_factory=list)
+
+
+class DesignUpdate(BaseModel):
+    name: Optional[str] = Field(default=None, min_length=1, max_length=120)
+    description: Optional[str] = Field(default=None, max_length=1000)
+    nodes: Optional[List[dict[str, Any]]] = None
+    edges: Optional[List[dict[str, Any]]] = None
+
+
+class DesignSummary(BaseModel):
+    id: int
+    name: str
+    description: Optional[str] = ""
+    node_count: int = 0
+    edge_count: int = 0
+    owner_id: Optional[int] = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class DesignResponse(BaseModel):
+    id: int
+    name: str
+    description: Optional[str] = ""
+    nodes: List[dict[str, Any]] = Field(default_factory=list)
+    edges: List[dict[str, Any]] = Field(default_factory=list)
+    owner_id: Optional[int] = None
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True

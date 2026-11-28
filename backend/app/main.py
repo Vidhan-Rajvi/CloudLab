@@ -5,7 +5,7 @@ from prometheus_fastapi_instrumentator import Instrumentator
 from sqlalchemy import text
 from config.session import SessionLocal, engine, Base
 from app import models
-from app.routers import users, auth, jobs, health
+from app.routers import users, auth, jobs, health, designs
 from config.redis import redis_client
 from app.utils.logger import get_logger
 from app.utils.performance_metrics import register_performance_metrics
@@ -53,6 +53,7 @@ app.include_router(auth.router)
 app.include_router(users.router)
 app.include_router(jobs.router)
 app.include_router(health.router)
+app.include_router(designs.router)
 
 # Configure Prometheus Metrics Instrumentation
 register_performance_metrics()
